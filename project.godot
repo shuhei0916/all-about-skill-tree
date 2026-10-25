@@ -12,6 +12,7 @@ config_version=5
 
 config/name="all-about-skill-tree"
 config/features=PackedStringArray("4.7", "Forward Plus")
+run/main_scene="res://main.tscn"
 config/icon="res://icon.svg"
 
 [display]
