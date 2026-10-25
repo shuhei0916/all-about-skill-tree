@@ -62,18 +62,18 @@ func test_アンロック済みのノードは再度アンロックできない(
 func test_何もアンロックしていなければステータスは基礎値のまま():
 	var allocation := SkillAllocation.new(tree, 5)
 
-	assert_eq(allocation.stats(), Stats.BASE)
+	assert_eq(allocation.stats(), Stats.calculate([]))
 
 
-func test_ステータスは基礎値とアンロック済みノードの補正の合計である():
-	a.stat_bonuses = {"attack": 3}
-	b.stat_bonuses = {"attack": 2, "hp": 20}
+func test_ステータスはアンロック済みノードの効果から計算される():
+	a.effects = [{"type": "flat", "stat": "attack", "value": 3}]
+	b.effects = [{"type": "flat", "stat": "attack", "value": 2}, {"type": "flat", "stat": "hp", "value": 20}]
 	var allocation := SkillAllocation.new(tree, 5)
 	allocation.unlock(a.id)
 	allocation.unlock(b.id)
 
 	var stats := allocation.stats()
 
-	assert_eq(stats["attack"], Stats.BASE["attack"] + 5)
-	assert_eq(stats["hp"], Stats.BASE["hp"] + 20)
-	assert_eq(stats["defense"], Stats.BASE["defense"])
+	assert_almost_eq(stats["attack"], Stats.BASE["attack"] + 5.0, 0.001)
+	assert_almost_eq(stats["hp"], Stats.BASE["hp"] + 20.0, 0.001)
+	assert_almost_eq(stats["defense"], float(Stats.BASE["defense"]), 0.001)

@@ -12,9 +12,9 @@ func _make_tree() -> SkillTree:
 	var tree := SkillTree.new()
 	var root := tree.add_node(-1, 0)
 	var a := tree.add_node(root.id, 1)
-	a.stat_bonuses = {"attack": 3}
+	a.effects = [{"type": "flat", "stat": "attack", "value": 3}]
 	var b := tree.add_node(a.id, 2)
-	b.stat_bonuses = {"hp": 20, "speed": 1}
+	b.effects = [{"type": "flat", "stat": "hp", "value": 20}, {"type": "flat", "stat": "speed", "value": 1}]
 	return tree
 
 
@@ -69,7 +69,7 @@ func test_JSON由来の小数は整数として扱う():
 
 	var loaded := serializer.from_dict(data)
 
-	assert_typeof(loaded.get_node(1).stat_bonuses["attack"], TYPE_INT)
+	assert_typeof(loaded.get_node(1).effects[0]["value"], TYPE_INT)
 
 
 func _assert_rejected(nodes: Array, expected_message: String) -> void:

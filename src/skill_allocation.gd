@@ -35,10 +35,9 @@ func unlocked_nodes() -> Array[SkillNode]:
 	return tree.nodes.filter(func(n: SkillNode): return is_unlocked(n.id))
 
 
-## 基礎値にアンロック済みノードの補正を合算したステータスを返す。
+## アンロック済みノードの効果をすべて反映したステータスを返す。
 func stats() -> Dictionary:
-	var result := Stats.BASE.duplicate()
+	var effects := []
 	for node in unlocked_nodes():
-		for stat in node.stat_bonuses:
-			result[stat] += node.stat_bonuses[stat]
-	return result
+		effects.append_array(node.effects)
+	return Stats.calculate(effects)

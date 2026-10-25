@@ -31,5 +31,5 @@ func _add_node(tree: SkillTree, rng: RandomNumberGenerator, parent: SkillNode) -
 	var node := tree.add_node(parent.id, parent.depth + 1)
 	var stat: String = Stats.NAMES[rng.randi_range(0, Stats.NAMES.size() - 1)]
 	var bonus_range: Array = Stats.BONUS_RANGE[stat]
-	node.stat_bonuses[stat] = rng.randi_range(bonus_range[0], bonus_range[1])
+	node.effects.append({"type": "flat", "stat": stat, "value": rng.randi_range(bonus_range[0], bonus_range[1])})
 	return node

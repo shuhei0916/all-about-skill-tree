@@ -73,19 +73,18 @@ func test_ノードは親よりも中心から遠くに配置される():
 		assert_gt(node.position.length(), parent.position.length())
 
 
-func test_ルート以外のノードは正のステータス補正を持つ():
+func test_ルート以外のノードは効果を持つ():
 	var tree := generator.generate(1)
 
 	for node in tree.nodes:
 		if node.parent_id == -1:
 			continue
-		assert_false(node.stat_bonuses.is_empty(), "ノード%dに補正がない" % node.id)
-		for stat in node.stat_bonuses:
-			assert_has(Stats.NAMES, stat)
-			assert_gt(node.stat_bonuses[stat], 0)
+		assert_false(node.effects.is_empty(), "ノード%dに効果がない" % node.id)
+		for effect in node.effects:
+			assert_has(Stats.NAMES, effect["stat"])
 
 
-func test_ルートはステータス補正を持たない():
+func test_ルートは効果を持たない():
 	var tree := generator.generate(1)
 
-	assert_true(tree.root().stat_bonuses.is_empty())
+	assert_true(tree.root().effects.is_empty())

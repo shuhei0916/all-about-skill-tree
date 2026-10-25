@@ -13,9 +13,15 @@ var errors: Array[String] = []
 func to_dict(tree: SkillTree) -> Dictionary:
 	var nodes := []
 	for node in tree.nodes:
-		nodes.append({"id": node.id, "parent": node.parent_id, "bonuses": node.stat_bonuses.duplicate()})
+		nodes.append({"id": node.id, "parent": node.parent_id, "bonuses": _bonuses_of(node)})
 	return {"version": VERSION, "nodes": nodes}
 
+
+func _bonuses_of(node: SkillNode) -> Dictionary:
+	var bonuses := {}
+	for effect in node.effects:
+		bonuses[effect["stat"]] = effect["value"]
+	return bonuses
 
 
 func to_json(tree: SkillTree) -> String:
@@ -151,7 +157,7 @@ func _build(entries: Array, root_entry: Dictionary) -> SkillTree:
 	for entry in ordered:
 		var node := tree.add_node(new_ids[entry["parent"]], 0)
 		for stat in entry["bonuses"]:
-			node.stat_bonuses[stat] = int(entry["bonuses"][stat])
+			node.effects.append({"type": "flat", "stat": stat, "value": int(entry["bonuses"][stat])})
 	return tree
 
 

@@ -167,4 +167,4 @@ func _on_node_hovered(node: SkillNode) -> void:
 		return
 	var state := "取得済み" if _allocation.is_unlocked(node.id) \
 		else "取得可能" if _allocation.can_unlock(node.id) else "未取得"
-	_hover_label.text = "%s\n[%s]" % [Stats.describe(node.stat_bonuses), state]
+	_hover_label.text = "%s\n[%s]" % [Stats.describe(node.effects), state]

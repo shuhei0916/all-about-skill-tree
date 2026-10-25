@@ -27,9 +27,34 @@ const BONUS_RANGE := {
 }
 
 
-## 補正を「攻撃力 +3」のような表示用の文字列にする。
-static func describe(bonuses: Dictionary) -> String:
+## 効果を「攻撃力 +3」のような表示用の文字列にする。
+static func describe(effects: Array) -> String:
 	var lines: Array[String] = []
-	for stat in bonuses:
-		lines.append("%s +%d" % [LABELS[stat], bonuses[stat]])
+	for effect in effects:
+		lines.append("%s +%d" % [LABELS[effect["stat"]], effect["value"]])
 	return "\n".join(lines)
+
+
+## 効果を集計して最終的なステータスを返す。
+## 最終値 = (基礎 + Σflat) × (1 + Σincreased%) × Π(1 + more%)
+static func calculate(effects: Array) -> Dictionary:
+	var flat := {}
+	var increased := {}
+	var more := {}
+	for stat in NAMES:
+		flat[stat] = float(BASE[stat])
+		increased[stat] = 1.0
+		more[stat] = 1.0
+	for effect in effects:
+		var stat: String = effect["stat"]
+		match effect["type"]:
+			"flat":
+				flat[stat] += effect["value"]
+			"increased":
+				increased[stat] += effect["value"] / 100.0
+			"more":
+				more[stat] *= 1.0 + effect["value"] / 100.0
+	var result := {}
+	for stat in NAMES:
+		result[stat] = flat[stat] * increased[stat] * more[stat]
+	return result
