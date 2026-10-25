@@ -17,14 +17,19 @@ var player_position := ARENA_SIZE / 2.0
 var player_hp: float
 var player_max_hp: float
 var enemies: Array[StageEnemy] = []
+## このステージで得たEXPと倒した敵の数
+var exp := 0
+var kills := 0
 
 var _effects: Array
+var _on_hits: Array
 var _rng := RandomNumberGenerator.new()
 var _attack_gauge := 0.0
 
 
 func _init(player_effects: Array, seed: int) -> void:
 	_effects = player_effects
+	_on_hits = player_effects.filter(func(e: Dictionary): return e["type"] == "on_hit")
 	_rng.seed = seed
 	player_max_hp = Stats.calculate(_effects)["hp"]
 	player_hp = player_max_hp
@@ -53,11 +58,38 @@ func _player_attack(delta: float) -> void:
 			_attack_gauge = ACTION_GAUGE
 			return
 		_attack_gauge -= ACTION_GAUGE
-		var stats := Stats.calculate(_effects)
+		var stats := Stats.calculate(_effects, _context(target))
 		var damage: float = stats["attack"]
 		if _rng.randf() * 100.0 < stats["crit_chance"]:
 			damage *= stats["crit_damage"] / 100.0
 		target.hp -= _damage(damage, target.defense)
+		for on_hit in _on_hits:
+			if _rng.randf() * 100.0 < on_hit["chance"]:
+				_apply_status(target, on_hit["apply"], stats)
+		if target.hp <= 0.0:
+			_defeat(target)
+
+
+## 条件付き効果の判定に使う状況。敵の状態は、いま相手にしている敵で判定する。
+func _context(enemy: StageEnemy) -> Dictionary:
+	return {
+		"enemy_blinded": enemy.statuses.has("blind"),
+		"enemy_poisoned": enemy.statuses.has("poison"),
+		"low_hp": player_hp <= player_max_hp * Battle.LOW_HP_RATIO,
+	}
+
+
+## 重ねがけすると持続時間が戻る。
+func _apply_status(enemy: StageEnemy, status: String, stats: Dictionary) -> void:
+	enemy.statuses[status] = Battle.STATUS_DURATION[status]
+	if status == "poison":
+		enemy.poison_dps = stats["attack"] * Battle.POISON_DAMAGE_RATIO
+
+
+func _defeat(enemy: StageEnemy) -> void:
+	enemies.erase(enemy)
+	exp += enemy.exp
+	kills += 1
 
 
 func _nearest_enemy_in_range() -> StageEnemy:
@@ -72,13 +104,24 @@ func _nearest_enemy_in_range() -> StageEnemy:
 
 
 func _enemies_act(delta: float) -> void:
-	var stats := Stats.calculate(_effects)
-	for enemy in enemies:
+	# 倒した敵はリストから消えるので、複製を回す
+	for enemy in enemies.duplicate():
+		if enemy.statuses.has("poison"):
+			enemy.hp -= enemy.poison_dps * delta
+			if enemy.hp <= 0.0:
+				_defeat(enemy)
+				continue
+		for status in enemy.statuses.keys():
+			enemy.statuses[status] -= delta
+			if enemy.statuses[status] <= 0.0:
+				enemy.statuses.erase(status)
 		enemy.position = enemy.position.move_toward(player_position, enemy.move_speed * delta)
 		enemy.contact_cooldown = maxf(enemy.contact_cooldown - delta, 0.0)
 		if enemy.contact_cooldown <= 0.0 and _touches_player(enemy):
-			player_hp -= _damage(enemy.attack, stats["defense"])
 			enemy.contact_cooldown = CONTACT_COOLDOWN
+			if enemy.statuses.has("blind") and _rng.randf() < Battle.BLIND_MISS_CHANCE:
+				continue
+			player_hp -= _damage(enemy.attack, Stats.calculate(_effects, _context(enemy))["defense"])
 
 
 func _touches_player(enemy: StageEnemy) -> bool:

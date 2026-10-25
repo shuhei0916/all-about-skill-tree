@@ -99,3 +99,55 @@ func test_射程内に敵がいなければ攻撃せず準備を溜めたまま�
 	enemy.position = stage.player_position + Vector2(100, 0)
 	stage.step(0.1, Vector2.ZERO)
 	assert_almost_eq(enemy.max_hp - enemy.hp, 10.0, 0.001)
+
+
+func test_HPが0になった敵は消えEXPが入る():
+	var stage := _stage([NO_CRIT])
+	var enemy := _target(stage, Vector2(100, 0))
+	enemy.hp = 10.0
+	enemy.exp = 3
+
+	stage.step(1.0, Vector2.ZERO)
+
+	assert_false(stage.enemies.has(enemy))
+	assert_eq(stage.exp, 3)
+	assert_eq(stage.kills, 1)
+
+
+func test_on_hitの状態異常は攻撃した敵に付き条件付き効果はその敵の状態で判定する():
+	var effects := [
+		NO_CRIT,
+		{"type": "on_hit", "chance": 100, "apply": "blind"},
+		{"type": "increased", "stat": "attack", "value": 100, "condition": "enemy_blinded"},
+	]
+	var stage := _stage(effects)
+	var enemy := _target(stage, Vector2(100, 0))
+
+	for i in 25:
+		stage.step(0.1, Vector2.ZERO)
+
+	# 1回目は盲目を付与する前なので10、2回目は20
+	assert_true(enemy.statuses.has("blind"))
+	assert_almost_eq(enemy.max_hp - enemy.hp, 30.0, 0.001)
+
+
+func test_毒は時間経過で敵にダメージを与える():
+	var stage := _stage([NO_CRIT, {"type": "on_hit", "chance": 100, "apply": "poison"}])
+	var enemy := _target(stage, Vector2(100, 0))
+
+	for i in 25:
+		stage.step(0.1, Vector2.ZERO)
+
+	# 攻撃2回で20。それに毒のダメージが加わる
+	assert_gt(enemy.max_hp - enemy.hp, 20.0)
+
+
+func test_盲目の敵は接触ダメージを外すことがある():
+	var normal := _stage([NO_CRIT])
+	var blinded := _stage([NO_CRIT, {"type": "on_hit", "chance": 100, "apply": "blind"}])
+	for stage in [normal, blinded]:
+		_target(stage, Vector2(20, 0)).attack = 1.0
+		for i in 300:
+			stage.step(0.1, Vector2.ZERO)
+
+	assert_gt(blinded.player_hp, normal.player_hp)
