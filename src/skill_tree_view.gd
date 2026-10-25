@@ -6,8 +6,13 @@ extends Control
 signal node_unlocked(node: SkillNode)
 signal node_hovered(node: SkillNode)
 
-const NODE_RADIUS := 10.0
-const ROOT_RADIUS := 16.0
+const NODE_RADIUS := 8.0
+const RADIUS_BY_KIND := {
+	"root": 16.0,
+	"small": NODE_RADIUS,
+	"notable": 13.0,
+	"keystone": 18.0,
+}
 ## 表示領域の短辺に対して、ツリーの半径が占める割合
 const FIT_RATIO := 0.45
 
@@ -17,6 +22,8 @@ const COLOR_LOCKED := Color("4a4f5c")
 const COLOR_EDGE_UNLOCKED := Color("f2c14e")
 const COLOR_EDGE_LOCKED := Color("33373f")
 const COLOR_HOVER := Color.WHITE
+const COLOR_KEYSTONE_RING := Color("b48ef0")
+const COLOR_NOTABLE_RING := Color("d9dde6")
 
 var tree: SkillTree
 var allocation: SkillAllocation
@@ -51,7 +58,7 @@ func _view_scale() -> float:
 
 
 func _radius_of(node: SkillNode) -> float:
-	return ROOT_RADIUS if node.parent_id == -1 else NODE_RADIUS
+	return RADIUS_BY_KIND[node.kind]
 
 
 func _draw() -> void:
@@ -65,8 +72,20 @@ func _draw() -> void:
 	for node in tree.nodes:
 		var center := to_screen(node.position)
 		draw_circle(center, _radius_of(node), _color_of(node))
+		_draw_kind_marker(node, center)
 		if node == _hovered:
 			draw_arc(center, _radius_of(node) + 3.0, 0.0, TAU, 32, COLOR_HOVER, 2.0, true)
+
+
+## notable と keystone は縁取りで目立たせる。keystone は二重の縁で特別感を出す。
+func _draw_kind_marker(node: SkillNode, center: Vector2) -> void:
+	var radius := _radius_of(node)
+	match node.kind:
+		"notable":
+			draw_arc(center, radius, 0.0, TAU, 32, COLOR_NOTABLE_RING, 2.0, true)
+		"keystone":
+			draw_arc(center, radius, 0.0, TAU, 40, COLOR_KEYSTONE_RING, 3.0, true)
+			draw_arc(center, radius - 6.0, 0.0, TAU, 32, COLOR_KEYSTONE_RING, 2.0, true)
 
 
 func _color_of(node: SkillNode) -> Color:

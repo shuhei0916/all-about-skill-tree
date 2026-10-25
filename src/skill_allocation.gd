@@ -37,7 +37,16 @@ func unlocked_nodes() -> Array[SkillNode]:
 
 ## アンロック済みノードの効果をすべて反映したステータスを返す。
 func stats() -> Dictionary:
+	return Stats.calculate(_unlocked_effects())
+
+
+## 指定したノードも取得した場合のステータスを返す。実際には取得しない。
+func stats_if_unlocked(id: int) -> Dictionary:
+	return Stats.calculate(_unlocked_effects() + tree.get_node(id).effects)
+
+
+func _unlocked_effects() -> Array:
 	var effects := []
 	for node in unlocked_nodes():
 		effects.append_array(node.effects)
-	return Stats.calculate(effects)
+	return effects

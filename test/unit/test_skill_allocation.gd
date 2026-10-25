@@ -77,3 +77,15 @@ func test_ステータスはアンロック済みノードの効果から計算�
 	assert_almost_eq(stats["attack"], Stats.BASE["attack"] + 5.0, 0.001)
 	assert_almost_eq(stats["hp"], Stats.BASE["hp"] + 20.0, 0.001)
 	assert_almost_eq(stats["defense"], float(Stats.BASE["defense"]), 0.001)
+
+
+func test_ノードを取得した場合のステータスを事前に計算できる():
+	a.effects = [{"type": "flat", "stat": "attack", "value": 3}]
+	b.effects = [{"type": "more", "stat": "attack", "value": 100}]
+	var allocation := SkillAllocation.new(tree, 5)
+	allocation.unlock(a.id)
+
+	var preview := allocation.stats_if_unlocked(b.id)
+
+	assert_almost_eq(preview["attack"], (Stats.BASE["attack"] + 3.0) * 2.0, 0.001)
+	assert_false(allocation.is_unlocked(b.id), "事前計算で取得してはいけない")

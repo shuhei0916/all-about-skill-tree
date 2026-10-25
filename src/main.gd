@@ -3,6 +3,7 @@ extends Control
 
 const SKILL_POINTS := 15
 const TREES_DIR := "user://trees"
+const KIND_LABELS := {"small": "小ノード", "notable": "ノータブル", "keystone": "キーストーン"}
 
 var _generator := SkillTreeGenerator.new()
 var _serializer := SkillTreeSerializer.new()
@@ -44,9 +45,15 @@ func _build_ui() -> void:
 		margin.add_theme_constant_override("margin_" + side, 16)
 	layout.add_child(margin)
 
+	# ノードの説明が長くなってもはみ出さないよう、パネルはスクロールできるようにする
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	margin.add_child(scroll)
+
 	var panel := VBoxContainer.new()
-	panel.add_theme_constant_override("separation", 12)
-	margin.add_child(panel)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_constant_override("separation", 8)
+	scroll.add_child(panel)
 
 	panel.add_child(_make_label("シード"))
 	_seed_edit = LineEdit.new()
@@ -151,20 +158,38 @@ func _seed_from_text(text: String) -> int:
 func _refresh_status() -> void:
 	_points_label.text = "スキルポイント: %d / %d" % [_allocation.points, SKILL_POINTS]
 	var stats := _allocation.stats()
-	var lines: Array[String] = []
+	var base := Stats.calculate([])
+	var lines: Array[String] = [
+		"火力の目安: %.1f" % Stats.offense(stats),
+		"耐久の目安: %.0f" % Stats.defense(stats),
+	]
 	for stat in Stats.NAMES:
-		var bonus: int = stats[stat] - Stats.BASE[stat]
-		var suffix := "  (+%d)" % bonus if bonus > 0 else ""
-		lines.append("%s: %d%s" % [Stats.LABELS[stat], stats[stat], suffix])
+		var diff := roundi(stats[stat]) - roundi(base[stat])
+		var suffix := "  (%+d)" % diff if diff != 0 else ""
+		lines.append("%s: %s%s" % [Stats.LABELS[stat], _format_stat(stat, stats[stat]), suffix])
 	_stats_label.text = "\n".join(lines)
+
+
+func _format_stat(stat: String, value: float) -> String:
+	return "%d%%" % roundi(value) if Stats.PERCENT_STATS.has(stat) else str(roundi(value))
 
 
 func _on_node_hovered(node: SkillNode) -> void:
 	if node == null:
 		return
-	if node.parent_id == -1:
+	if node.kind == "root":
 		_hover_label.text = "スタート地点"
 		return
-	var state := "取得済み" if _allocation.is_unlocked(node.id) \
-		else "取得可能" if _allocation.can_unlock(node.id) else "未取得"
-	_hover_label.text = "%s\n[%s]" % [Stats.describe(node.effects), state]
+	var title: String = node.name if node.name != "" else KIND_LABELS[node.kind]
+	var lines: Array[String] = ["【%s】" % title, Stats.describe(node.effects)]
+	if _allocation.is_unlocked(node.id):
+		lines.append("取得済み")
+	else:
+		# 取得した場合に火力と耐久がどう変わるかを見せ、トレードオフを判断しやすくする
+		var now := _allocation.stats()
+		var after := _allocation.stats_if_unlocked(node.id)
+		lines.append("取得すると 火力 %.1f → %.1f" % [Stats.offense(now), Stats.offense(after)])
+		lines.append("　　　　　 耐久 %.0f → %.0f" % [Stats.defense(now), Stats.defense(after)])
+		if not _allocation.can_unlock(node.id):
+			lines.append("（まだ取得できません）")
+	_hover_label.text = "\n".join(lines)
