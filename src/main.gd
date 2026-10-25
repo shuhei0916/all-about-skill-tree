@@ -1,17 +1,19 @@
 extends Control
 ## シード入力・ステータス表示・スキルツリーを並べたメイン画面。
 
-const SKILL_POINTS := 15
 const TREES_DIR := "user://trees"
 const KIND_LABELS := {"small": "小ノード", "notable": "ノータブル", "keystone": "キーストーン"}
-## 戦闘シミュレーションを何回繰り返して平均をとるか
-const BATTLE_RUNS := 20
 
 var _generator := SkillTreeGenerator.new()
 var _serializer := SkillTreeSerializer.new()
 var _allocation: SkillAllocation
-var _battle_summary := {}
+var _level: PlayerLevel
+## 次に挑むステージ
+var _stage_number := 1
 
+var _tree_screen: Control
+var _stage_view: StageView
+var _start_button: Button
 var _view: SkillTreeView
 var _seed_edit: LineEdit
 var _points_label: Label
@@ -35,6 +37,7 @@ func _build_ui() -> void:
 	var layout := HBoxContainer.new()
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(layout)
+	_tree_screen = layout
 
 	_view = SkillTreeView.new()
 	_view.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -78,6 +81,8 @@ func _build_ui() -> void:
 	panel.add_child(HSeparator.new())
 	_points_label = _make_label("")
 	panel.add_child(_points_label)
+	_start_button = _make_button("", _start_stage)
+	panel.add_child(_start_button)
 	_stats_label = _make_label("")
 	panel.add_child(_stats_label)
 
@@ -90,6 +95,12 @@ func _build_ui() -> void:
 	_save_dialog.file_selected.connect(_save_tree)
 	_open_dialog = _make_file_dialog(FileDialog.FILE_MODE_OPEN_FILE)
 	_open_dialog.file_selected.connect(_load_tree)
+
+	_stage_view = StageView.new()
+	_stage_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_stage_view.finished.connect(_on_stage_finished)
+	_stage_view.hide()
+	add_child(_stage_view)
 
 
 func _make_label(text: String) -> Label:
@@ -125,15 +136,17 @@ func _generate() -> void:
 	_show_tree(_generator.generate(_seed_from_text(_seed_edit.text)))
 
 
-## 取得状況だけを初期化し、表示中のツリーはそのまま使う。
+## ステージ1からやり直す。表示中のツリーはそのまま使う。
 func _reset() -> void:
 	_show_tree(_allocation.tree)
 
 
 func _show_tree(tree: SkillTree) -> void:
-	_allocation = SkillAllocation.new(tree, SKILL_POINTS)
+	_allocation = SkillAllocation.new(tree, 0)
+	_level = PlayerLevel.new()
+	_stage_number = 1
 	_view.set_tree(tree, _allocation)
-	_hover_label.text = "ノードにカーソルを合わせると効果を表示します。\n緑のノードをクリックで取得。"
+	_hover_label.text = "ステージで敵を倒してレベルを上げると、スキルポイントがもらえます。\nWASD／矢印キーで移動、攻撃は自動。\n\nノードにカーソルを合わせると効果を表示します。緑のノードをクリックで取得。"
 	_refresh_status()
 
 
@@ -158,16 +171,36 @@ func _seed_from_text(text: String) -> int:
 	return text.to_int() if text.is_valid_int() else hash(text)
 
 
+func _start_stage() -> void:
+	_tree_screen.hide()
+	_stage_view.show()
+	_stage_view.start(Stage.new(_allocation.unlocked_effects(), randi(), _stage_number))
+
+
+func _on_stage_finished(stage: Stage) -> void:
+	# 決着の瞬間が見えるよう、少し待ってからツリー画面に戻す
+	await get_tree().create_timer(1.0).timeout
+	_stage_view.hide()
+	_tree_screen.show()
+	if stage.state == Stage.State.CLEARED:
+		var gained := _level.add_exp(stage.exp)
+		_allocation.points += gained
+		_stage_number += 1
+		_hover_label.text = "ステージ %d クリア！\n%d体撃破、EXP +%d\nレベルが %d 上がりました。" % [stage.number, stage.kills, stage.exp, gained]
+		_refresh_status()
+	else:
+		var reached := stage.number
+		_reset()
+		_hover_label.text = "ステージ %d で力尽きました。\nステージ1からやり直します（ツリーはそのまま）。" % reached
+
+
 func _refresh_status() -> void:
-	_points_label.text = "スキルポイント: %d / %d" % [_allocation.points, SKILL_POINTS]
+	_points_label.text = "レベル %d（EXP %d / %d）\nスキルポイント: %d" % [
+		_level.level, _level.exp, _level.exp_to_next(), _allocation.points]
+	_start_button.text = "ステージ %d へ" % _stage_number
 	var stats := _allocation.stats()
 	var base := Stats.calculate([])
-	_battle_summary = Battle.evaluate(_allocation.unlocked_effects(), Battle.STANDARD_ENEMY, BATTLE_RUNS)
-	var lines: Array[String] = [
-		"基準の敵と%d回戦った結果" % BATTLE_RUNS,
-		"  勝率 %s ／ DPS %s" % [_format_win_rate(_battle_summary), _format_dps(_battle_summary)],
-		"  撃破時間 %s ／ 残りHP %s" % [_format_win_time(_battle_summary), _format_hp_left(_battle_summary)],
-	]
+	var lines: Array[String] = []
 	for stat in Stats.NAMES:
 		var diff := roundi(stats[stat]) - roundi(base[stat])
 		var suffix := "  (%+d)" % diff if diff != 0 else ""
@@ -177,22 +210,6 @@ func _refresh_status() -> void:
 
 func _format_stat(stat: String, value: float) -> String:
 	return "%d%%" % roundi(value) if Stats.PERCENT_STATS.has(stat) else str(roundi(value))
-
-
-func _format_win_rate(summary: Dictionary) -> String:
-	return "%d%%" % roundi(summary["win_rate"] * 100.0)
-
-
-func _format_dps(summary: Dictionary) -> String:
-	return "%.1f" % summary["dps"]
-
-
-func _format_win_time(summary: Dictionary) -> String:
-	return "-" if is_inf(summary["avg_win_time"]) else "%.1f秒" % summary["avg_win_time"]
-
-
-func _format_hp_left(summary: Dictionary) -> String:
-	return "%d%%" % roundi(summary["hp_left_ratio"] * 100.0)
 
 
 func _on_node_hovered(node: SkillNode) -> void:
@@ -206,11 +223,12 @@ func _on_node_hovered(node: SkillNode) -> void:
 	if _allocation.is_unlocked(node.id):
 		lines.append("取得済み")
 	else:
-		# 取得した場合に戦闘結果がどう変わるかを見せ、トレードオフを判断しやすくする
-		var after := Battle.evaluate(_allocation.unlocked_effects() + node.effects, Battle.STANDARD_ENEMY, BATTLE_RUNS)
-		lines.append("取得すると 勝率 %s → %s" % [_format_win_rate(_battle_summary), _format_win_rate(after)])
-		lines.append("  DPS %s → %s ／ 残りHP %s → %s" % [
-			_format_dps(_battle_summary), _format_dps(after), _format_hp_left(_battle_summary), _format_hp_left(after)])
+		# 取得した場合にステータスがどう変わるかを見せる（条件付き効果は条件が成立していないときの値）
+		var before := _allocation.stats()
+		var after := _allocation.stats_if_unlocked(node.id)
+		for stat in Stats.NAMES:
+			if roundi(after[stat]) != roundi(before[stat]):
+				lines.append("  %s %s → %s" % [Stats.LABELS[stat], _format_stat(stat, before[stat]), _format_stat(stat, after[stat])])
 		if not _allocation.can_unlock(node.id):
 			lines.append("（まだ取得できません）")
 	_hover_label.text = "\n".join(lines)
