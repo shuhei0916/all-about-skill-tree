@@ -2,8 +2,10 @@ extends Control
 ## シード入力・ステータス表示・スキルツリーを並べたメイン画面。
 
 const SKILL_POINTS := 15
+const TREES_DIR := "user://trees"
 
 var _generator := SkillTreeGenerator.new()
+var _serializer := SkillTreeSerializer.new()
 var _allocation: SkillAllocation
 
 var _view: SkillTreeView
@@ -11,6 +13,8 @@ var _seed_edit: LineEdit
 var _points_label: Label
 var _stats_label: Label
 var _hover_label: Label
+var _save_dialog: FileDialog
+var _open_dialog: FileDialog
 
 
 func _ready() -> void:
@@ -54,7 +58,12 @@ func _build_ui() -> void:
 	panel.add_child(buttons)
 	buttons.add_child(_make_button("生成", _generate))
 	buttons.add_child(_make_button("ランダム", _randomize_seed))
-	buttons.add_child(_make_button("リセット", _generate))
+	buttons.add_child(_make_button("リセット", _reset))
+
+	var file_buttons := HBoxContainer.new()
+	panel.add_child(file_buttons)
+	file_buttons.add_child(_make_button("保存", func(): _save_dialog.popup_centered_ratio(0.6)))
+	file_buttons.add_child(_make_button("読み込み", func(): _open_dialog.popup_centered_ratio(0.6)))
 
 	panel.add_child(HSeparator.new())
 	_points_label = _make_label("")
@@ -66,6 +75,11 @@ func _build_ui() -> void:
 	_hover_label = _make_label("")
 	_hover_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	panel.add_child(_hover_label)
+
+	_save_dialog = _make_file_dialog(FileDialog.FILE_MODE_SAVE_FILE)
+	_save_dialog.file_selected.connect(_save_tree)
+	_open_dialog = _make_file_dialog(FileDialog.FILE_MODE_OPEN_FILE)
+	_open_dialog.file_selected.connect(_load_tree)
 
 
 func _make_label(text: String) -> Label:
@@ -81,17 +95,52 @@ func _make_button(text: String, on_pressed: Callable) -> Button:
 	return button
 
 
+func _make_file_dialog(mode: FileDialog.FileMode) -> FileDialog:
+	var dialog := FileDialog.new()
+	dialog.file_mode = mode
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.filters = PackedStringArray(["*.json ; スキルツリー"])
+	DirAccess.make_dir_recursive_absolute(TREES_DIR)
+	dialog.current_dir = ProjectSettings.globalize_path(TREES_DIR)
+	add_child(dialog)
+	return dialog
+
+
 func _randomize_seed() -> void:
 	_seed_edit.text = str(randi())
 	_generate()
 
 
 func _generate() -> void:
-	var tree := _generator.generate(_seed_from_text(_seed_edit.text))
+	_show_tree(_generator.generate(_seed_from_text(_seed_edit.text)))
+
+
+## 取得状況だけを初期化し、表示中のツリーはそのまま使う。
+func _reset() -> void:
+	_show_tree(_allocation.tree)
+
+
+func _show_tree(tree: SkillTree) -> void:
 	_allocation = SkillAllocation.new(tree, SKILL_POINTS)
 	_view.set_tree(tree, _allocation)
 	_hover_label.text = "ノードにカーソルを合わせると効果を表示します。\n緑のノードをクリックで取得。"
 	_refresh_status()
+
+
+func _save_tree(path: String) -> void:
+	var error := _serializer.save(_allocation.tree, path)
+	_hover_label.text = "保存しました: %s" % path if error == OK \
+		else "保存に失敗しました: %s" % error_string(error)
+
+
+func _load_tree(path: String) -> void:
+	var tree := _serializer.load_file(path)
+	if tree == null:
+		_hover_label.text = "読み込みに失敗しました:\n" + "\n".join(_serializer.errors)
+		return
+	_seed_edit.text = ""
+	_seed_edit.placeholder_text = path.get_file()
+	_show_tree(tree)
 
 
 ## 数値ならそのまま、それ以外の文字列はハッシュ値をシードにする。

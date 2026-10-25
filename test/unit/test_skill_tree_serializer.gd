@@ -54,11 +54,13 @@ func test_IDが連番でなく親が子より後に書かれていても読み�
 
 	var loaded := serializer.from_dict(data)
 
+	# ルートが0番、それ以外はファイルに書かれた順（70→1, 30→2）
 	assert_eq(serializer.to_dict(loaded)["nodes"], [
 		{"id": 0, "parent": -1, "bonuses": {}},
-		{"id": 1, "parent": 0, "bonuses": {"attack": 1}},
-		{"id": 2, "parent": 1, "bonuses": {"hp": 10}},
+		{"id": 1, "parent": 2, "bonuses": {"hp": 10}},
+		{"id": 2, "parent": 0, "bonuses": {"attack": 1}},
 	])
+	assert_eq(loaded.nodes.map(func(n: SkillNode): return n.depth), [0, 2, 1])
 
 
 func test_JSON由来の小数は整数として扱う():
@@ -195,3 +197,11 @@ func test_不正なJSON文字列はエラーになる():
 func test_JSONの最上位がオブジェクトでない場合はエラーになる():
 	assert_null(serializer.from_json("[1, 2, 3]"))
 	assert_false(serializer.errors.is_empty())
+
+
+func test_生成したツリーを保存して読み込むとIDも含めて元に戻る():
+	var original := SkillTreeGenerator.new().generate(777)
+
+	var loaded := serializer.from_json(serializer.to_json(original))
+
+	assert_eq(serializer.to_dict(loaded), serializer.to_dict(original))

@@ -62,7 +62,7 @@ func from_dict(data: Dictionary) -> SkillTree:
 		return null
 
 	var tree := _build(entries, root_entry)
-	if tree.nodes.size() < entries.size():
+	if _assign_depths(tree) < tree.nodes.size():
 		errors.append("ルートから辿れないノードがあります（親子関係が循環していないか確認してください）")
 		return null
 	RadialTreeLayout.new().apply(tree)
@@ -138,22 +138,31 @@ func _validate_parents(entries: Array) -> void:
 			errors.append("ノード %d の親 %d が存在しません" % [entry["id"], entry["parent"]])
 
 
-## ルートから幅優先で辿ってツリーを組み立てる。
-## 内部のIDは辿った順に振り直すため、元のIDの並びや記述順には依存しない。
+## 内部のIDは、ルートを0番、それ以外をファイルに書かれた順に振り直す。
+## 生成したツリーは元からこの順で並んでいるため、保存して読み込むと同じIDに戻る。
 func _build(entries: Array, root_entry: Dictionary) -> SkillTree:
-	var children_by_parent := {}
-	for entry in entries:
-		if entry != root_entry:
-			children_by_parent.get_or_add(entry["parent"], []).append(entry)
+	var ordered := [root_entry]
+	ordered.append_array(entries.filter(func(e: Dictionary): return e != root_entry))
+	var new_ids := {-1: -1}
+	for i in ordered.size():
+		new_ids[ordered[i]["id"]] = i
 
 	var tree := SkillTree.new()
-	var queue := [[root_entry, tree.add_node(-1, 0)]]
-	while not queue.is_empty():
-		var pair: Array = queue.pop_front()
-		var entry: Dictionary = pair[0]
-		var node: SkillNode = pair[1]
+	for entry in ordered:
+		var node := tree.add_node(new_ids[entry["parent"]], 0)
 		for stat in entry["bonuses"]:
 			node.stat_bonuses[stat] = int(entry["bonuses"][stat])
-		for child_entry in children_by_parent.get(entry["id"], []):
-			queue.append([child_entry, tree.add_node(node.id, node.depth + 1)])
 	return tree
+
+
+## ルートから幅優先で辿って深さを決め、辿り着けたノードの数を返す。
+func _assign_depths(tree: SkillTree) -> int:
+	var queue: Array[SkillNode] = [tree.root()]
+	var reached := 0
+	while not queue.is_empty():
+		var node: SkillNode = queue.pop_front()
+		reached += 1
+		for child in tree.children_of(node.id):
+			child.depth = node.depth + 1
+			queue.append(child)
+	return reached
