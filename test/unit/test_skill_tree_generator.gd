@@ -88,3 +88,52 @@ func test_ルートは効果を持たない():
 	var tree := generator.generate(1)
 
 	assert_true(tree.root().effects.is_empty())
+
+
+func _nodes_of_kind(tree: SkillTree, kind: String) -> Array:
+	return tree.nodes.filter(func(n: SkillNode): return n.kind == kind)
+
+
+func test_生成されたツリーにはsmall・notable・keystoneが含まれる():
+	for seed in 20:
+		var tree := generator.generate(seed)
+
+		assert_eq(tree.root().kind, "root")
+		assert_false(_nodes_of_kind(tree, "small").is_empty(), "seed %d" % seed)
+		assert_false(_nodes_of_kind(tree, "notable").is_empty(), "seed %d" % seed)
+		assert_false(_nodes_of_kind(tree, "keystone").is_empty(), "seed %d" % seed)
+
+
+func test_notableとkeystoneは枝の末端に置かれる():
+	var tree := generator.generate(1)
+
+	for node in _nodes_of_kind(tree, "notable") + _nodes_of_kind(tree, "keystone"):
+		assert_true(tree.children_of(node.id).is_empty(), "ノード%dの先にまだノードがある" % node.id)
+
+
+func test_smallはflatかincreasedを1つ持つ():
+	var tree := generator.generate(1)
+
+	for node in _nodes_of_kind(tree, "small"):
+		assert_eq(node.effects.size(), 1)
+		assert_has(["flat", "increased"], node.effects[0]["type"])
+		assert_gt(node.effects[0]["value"], 0)
+
+
+func test_notableはincreasedを2つ以上持つ():
+	var tree := generator.generate(1)
+
+	for node in _nodes_of_kind(tree, "notable"):
+		assert_gte(node.effects.size(), 2)
+		for effect in node.effects:
+			assert_eq(effect["type"], "increased")
+
+
+func test_keystoneは名前を持ちプラスのmoreとマイナスのmoreを両方持つ():
+	var tree := generator.generate(1)
+
+	for node in _nodes_of_kind(tree, "keystone"):
+		assert_ne(node.name, "")
+		var mores: Array = node.effects.filter(func(e): return e["type"] == "more").map(func(e): return e["value"])
+		assert_true(mores.any(func(v): return v > 0), "%s に利得がない" % node.name)
+		assert_true(mores.any(func(v): return v < 0), "%s に代償がない" % node.name)
