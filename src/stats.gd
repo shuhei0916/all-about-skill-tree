@@ -54,7 +54,8 @@ static func _describe_one(effect: Dictionary) -> String:
 	var text := ""
 	match effect["type"]:
 		"flat":
-			text = "%s +%d" % [label, effect["value"]]
+			var unit := "ポイント" if PERCENT_STATS.has(effect["stat"]) else ""
+			text = "%s +%d%s" % [label, effect["value"], unit]
 		"increased":
 			text = "%s +%d%%" % [label, effect["value"]]
 		"more":
@@ -62,18 +63,6 @@ static func _describe_one(effect: Dictionary) -> String:
 	if effect.has("condition"):
 		text = "%s %s" % [CONDITION_LABELS[effect["condition"]], text]
 	return text
-
-
-## 火力の目安。1秒あたりのダメージの期待値に相当する（素早さ10で1回攻撃）。
-static func offense(stats: Dictionary) -> float:
-	var crit_chance := clampf(stats["crit_chance"] / 100.0, 0.0, 1.0)
-	var crit_multiplier: float = 1.0 + crit_chance * (stats["crit_damage"] / 100.0 - 1.0)
-	return stats["attack"] * stats["speed"] / 10.0 * crit_multiplier
-
-
-## 耐久の目安。防御力100で受けるダメージが半分になる想定。
-static func defense(stats: Dictionary) -> float:
-	return stats["hp"] * (1.0 + stats["defense"] / 100.0)
 
 
 ## 効果を集計して最終的なステータスを返す。

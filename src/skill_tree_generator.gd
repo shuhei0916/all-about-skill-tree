@@ -58,7 +58,7 @@ const THEMES := [
 		{"type": "increased", "stat": "speed", "value": [5, 10]}]},
 	"payoffs": [
 		{"name": "闇討ち", "effects": [
-			{"type": "increased", "stat": "crit_chance", "value": [40, 60], "condition": "enemy_blinded"},
+			{"type": "flat", "stat": "crit_chance", "value": [15, 25], "condition": "enemy_blinded"},
 			{"type": "increased", "stat": "crit_damage", "value": [15, 25], "condition": "enemy_blinded"}]},
 		{"name": "見えざる刃", "effects": [
 			{"type": "increased", "stat": "attack", "value": [20, 30], "condition": "enemy_blinded"},

@@ -15,11 +15,12 @@ const POISON_DAMAGE_RATIO := 0.3
 ## 状態異常の持続時間（秒）。重ねがけすると持続時間が戻る。
 const STATUS_DURATION := {"blind": 3.0, "poison": 4.0}
 
-## 基準となる敵。何も取得していない状態ではやや負ける強さにしてある。
+## 基準となる敵。何も取得していなければ負け、適当に15ポイント振ると勝ったり負けたり、
+## 考えて振るとほぼ勝てる強さにしてある（2026-10-25 に生成器のシード0〜7で調整）。
 const STANDARD_ENEMY := {
-	"hp": 200.0,
-	"attack": 8.0,
-	"defense": 10.0,
+	"hp": 300.0,
+	"attack": 12.0,
+	"defense": 15.0,
 	"speed": 10.0,
 	"crit_chance": 5.0,
 	"crit_damage": 150.0,

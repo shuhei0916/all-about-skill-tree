@@ -4,10 +4,13 @@ extends Control
 const SKILL_POINTS := 15
 const TREES_DIR := "user://trees"
 const KIND_LABELS := {"small": "小ノード", "notable": "ノータブル", "keystone": "キーストーン"}
+## 戦闘シミュレーションを何回繰り返して平均をとるか
+const BATTLE_RUNS := 20
 
 var _generator := SkillTreeGenerator.new()
 var _serializer := SkillTreeSerializer.new()
 var _allocation: SkillAllocation
+var _battle_summary := {}
 
 var _view: SkillTreeView
 var _seed_edit: LineEdit
@@ -40,7 +43,7 @@ func _build_ui() -> void:
 	layout.add_child(_view)
 
 	var margin := MarginContainer.new()
-	margin.custom_minimum_size.x = 260
+	margin.custom_minimum_size.x = 300
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 16)
 	layout.add_child(margin)
@@ -159,9 +162,11 @@ func _refresh_status() -> void:
 	_points_label.text = "スキルポイント: %d / %d" % [_allocation.points, SKILL_POINTS]
 	var stats := _allocation.stats()
 	var base := Stats.calculate([])
+	_battle_summary = Battle.evaluate(_allocation.unlocked_effects(), Battle.STANDARD_ENEMY, BATTLE_RUNS)
 	var lines: Array[String] = [
-		"火力の目安: %.1f" % Stats.offense(stats),
-		"耐久の目安: %.0f" % Stats.defense(stats),
+		"基準の敵と%d回戦った結果" % BATTLE_RUNS,
+		"  勝率 %s ／ DPS %s" % [_format_win_rate(_battle_summary), _format_dps(_battle_summary)],
+		"  撃破時間 %s ／ 残りHP %s" % [_format_win_time(_battle_summary), _format_hp_left(_battle_summary)],
 	]
 	for stat in Stats.NAMES:
 		var diff := roundi(stats[stat]) - roundi(base[stat])
@@ -172,6 +177,22 @@ func _refresh_status() -> void:
 
 func _format_stat(stat: String, value: float) -> String:
 	return "%d%%" % roundi(value) if Stats.PERCENT_STATS.has(stat) else str(roundi(value))
+
+
+func _format_win_rate(summary: Dictionary) -> String:
+	return "%d%%" % roundi(summary["win_rate"] * 100.0)
+
+
+func _format_dps(summary: Dictionary) -> String:
+	return "%.1f" % summary["dps"]
+
+
+func _format_win_time(summary: Dictionary) -> String:
+	return "-" if is_inf(summary["avg_win_time"]) else "%.1f秒" % summary["avg_win_time"]
+
+
+func _format_hp_left(summary: Dictionary) -> String:
+	return "%d%%" % roundi(summary["hp_left_ratio"] * 100.0)
 
 
 func _on_node_hovered(node: SkillNode) -> void:
@@ -185,11 +206,11 @@ func _on_node_hovered(node: SkillNode) -> void:
 	if _allocation.is_unlocked(node.id):
 		lines.append("取得済み")
 	else:
-		# 取得した場合に火力と耐久がどう変わるかを見せ、トレードオフを判断しやすくする
-		var now := _allocation.stats()
-		var after := _allocation.stats_if_unlocked(node.id)
-		lines.append("取得すると 火力 %.1f → %.1f" % [Stats.offense(now), Stats.offense(after)])
-		lines.append("　　　　　 耐久 %.0f → %.0f" % [Stats.defense(now), Stats.defense(after)])
+		# 取得した場合に戦闘結果がどう変わるかを見せ、トレードオフを判断しやすくする
+		var after := Battle.evaluate(_allocation.unlocked_effects() + node.effects, Battle.STANDARD_ENEMY, BATTLE_RUNS)
+		lines.append("取得すると 勝率 %s → %s" % [_format_win_rate(_battle_summary), _format_win_rate(after)])
+		lines.append("  DPS %s → %s ／ 残りHP %s → %s" % [
+			_format_dps(_battle_summary), _format_dps(after), _format_hp_left(_battle_summary), _format_hp_left(after)])
 		if not _allocation.can_unlock(node.id):
 			lines.append("（まだ取得できません）")
 	_hover_label.text = "\n".join(lines)

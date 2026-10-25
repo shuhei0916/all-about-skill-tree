@@ -71,26 +71,6 @@ func test_会心率と会心ダメージを持つ():
 	assert_has(Stats.NAMES, "crit_damage")
 
 
-func test_火力の目安は攻撃力と素早さと会心の期待値から計算する():
-	# 攻撃力20 × 素早さ15/10 × (1 + 会心率40% × (会心ダメージ200% - 100%)) = 20 × 1.5 × 1.4 = 42
-	var stats := {"hp": 100.0, "attack": 20.0, "defense": 0.0, "speed": 15.0, "crit_chance": 40.0, "crit_damage": 200.0}
-
-	assert_almost_eq(Stats.offense(stats), 42.0, 0.001)
-
-
-func test_会心率は100パーセントを超えても100パーセントとして扱う():
-	var stats := {"hp": 100.0, "attack": 10.0, "defense": 0.0, "speed": 10.0, "crit_chance": 150.0, "crit_damage": 200.0}
-
-	assert_almost_eq(Stats.offense(stats), 20.0, 0.001)
-
-
-func test_耐久の目安はHPと防御力から計算する():
-	# HP200 × (1 + 防御力50/100) = 300
-	var stats := {"hp": 200.0, "attack": 10.0, "defense": 50.0, "speed": 10.0, "crit_chance": 0.0, "crit_damage": 150.0}
-
-	assert_almost_eq(Stats.defense(stats), 300.0, 0.001)
-
-
 func test_条件付き効果は状況が条件を満たすときだけ計算に含まれる():
 	var effects := [{"type": "increased", "stat": "attack", "value": 50, "condition": "enemy_blinded"}]
 
@@ -118,3 +98,7 @@ func test_条件付き効果は条件を先頭に付けて表示する():
 
 func test_on_hitは発動率と付与する状態異常を表示する():
 	assert_eq(Stats.describe([{"type": "on_hit", "chance": 20, "apply": "poison"}]), "攻撃時 20%で毒を付与")
+
+
+func test_百分率のステータスのflatはポイントで表示する():
+	assert_eq(Stats.describe([{"type": "flat", "stat": "crit_chance", "value": 20}]), "会心率 +20ポイント")
