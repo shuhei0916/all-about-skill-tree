@@ -14,11 +14,12 @@ const ATTACK_RANGE := 300.0
 const ACTION_GAUGE := 100.0
 ## 敵が一度接触ダメージを与えてから、次に与えられるようになるまでの秒数
 const CONTACT_COOLDOWN := 1.0
-## 敵が湧く間隔（秒）。ステージの始めから終わりにかけて短くなる
-const SPAWN_INTERVAL_START := 1.5
-const SPAWN_INTERVAL_END := 0.5
+## 敵が湧く間隔（秒）。ステージの始めから終わりにかけて短くなる。
+## 逃げ回るだけの自動操縦でノードをランダムに振ると、5〜8ステージ以上もつ程度にしてある（2026-10-25 に調整）
+const SPAWN_INTERVAL_START := 3.0
+const SPAWN_INTERVAL_END := 1.2
 ## ステージが1つ進むごとに、敵のHPと攻撃力がこの割合だけ増える（1ステージ目が基準）
-const HP_GROWTH := 0.5
+const HP_GROWTH := 0.3
 const ATTACK_GROWTH := 0.25
 
 ## 何ステージ目か。1から始まる
@@ -57,6 +58,8 @@ func spawn_enemy(position: Vector2) -> StageEnemy:
 	enemy.max_hp *= 1.0 + HP_GROWTH * (number - 1)
 	enemy.hp = enemy.max_hp
 	enemy.attack *= 1.0 + ATTACK_GROWTH * (number - 1)
+	# 後のステージほど倒せる数が減るので、1体あたりのEXPを増やしてレベルアップの頻度を保つ
+	enemy.exp = number
 	enemies.append(enemy)
 	return enemy
 

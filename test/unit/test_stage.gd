@@ -220,3 +220,10 @@ func test_ステージが進むほど敵が強くなる():
 	assert_gt(third.max_hp, first.max_hp)
 	assert_eq(third.hp, third.max_hp)
 	assert_gt(third.attack, first.attack)
+
+
+func test_ステージが進むほど敵を倒したときのEXPが増える():
+	var first := Stage.new([], 1, 1).spawn_enemy(Vector2.ZERO)
+	var third := Stage.new([], 1, 3).spawn_enemy(Vector2.ZERO)
+
+	assert_gt(third.exp, first.exp)
