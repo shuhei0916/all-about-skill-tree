@@ -50,6 +50,42 @@ const KEYSTONES := [
 ]
 
 
+## テーマ。付与する側（enabler）と、その状態を活かす側（payoffs）のノータブルをセットで置く。
+## 値は [最小, 最大] の範囲から決める。
+const THEMES := [
+	{"enabler": {"name": "目くらまし", "effects": [
+		{"type": "on_hit", "chance": [20, 30], "apply": "blind"},
+		{"type": "increased", "stat": "speed", "value": [5, 10]}]},
+	"payoffs": [
+		{"name": "闇討ち", "effects": [
+			{"type": "increased", "stat": "crit_chance", "value": [40, 60], "condition": "enemy_blinded"},
+			{"type": "increased", "stat": "crit_damage", "value": [15, 25], "condition": "enemy_blinded"}]},
+		{"name": "見えざる刃", "effects": [
+			{"type": "increased", "stat": "attack", "value": [20, 30], "condition": "enemy_blinded"},
+			{"type": "increased", "stat": "defense", "value": [15, 25]}]}]},
+	{"enabler": {"name": "毒塗りの刃", "effects": [
+		{"type": "on_hit", "chance": [25, 35], "apply": "poison"},
+		{"type": "increased", "stat": "attack", "value": [5, 10]}]},
+	"payoffs": [
+		{"name": "弱みにつけこむ", "effects": [
+			{"type": "increased", "stat": "attack", "value": [25, 40], "condition": "enemy_poisoned"},
+			{"type": "increased", "stat": "speed", "value": [10, 15], "condition": "enemy_poisoned"}]},
+		{"name": "致死の調合", "effects": [
+			{"type": "increased", "stat": "crit_damage", "value": [30, 50], "condition": "enemy_poisoned"},
+			{"type": "increased", "stat": "hp", "value": [10, 15]}]}]},
+	{"enabler": {},
+	"payoffs": [
+		{"name": "背水の陣", "effects": [
+			{"type": "more", "stat": "attack", "value": [25, 40], "condition": "low_hp"},
+			{"type": "increased", "stat": "hp", "value": [10, 20]}]},
+		{"name": "窮鼠", "effects": [
+			{"type": "increased", "stat": "defense", "value": [40, 60], "condition": "low_hp"},
+			{"type": "increased", "stat": "speed", "value": [15, 25], "condition": "low_hp"}]}]},
+]
+## 1つのツリーに入れるテーマの数 [最小, 最大]
+var theme_count := [1, 2]
+
+
 func generate(seed: int) -> SkillTree:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
@@ -58,6 +94,7 @@ func generate(seed: int) -> SkillTree:
 	for i in rng.randi_range(min_branches, max_branches):
 		_grow(tree, rng, tree.add_node(root.id, 1))
 	_assign_kinds(tree, rng)
+	_assign_themes(tree, rng)
 	RadialTreeLayout.new().apply(tree)
 	return tree
 
@@ -95,6 +132,38 @@ func _assign_kinds(tree: SkillTree, rng: RandomNumberGenerator) -> void:
 			_make_notable(leaves[i], rng)
 		else:
 			_make_small(leaves[i], rng)
+
+
+## 既存のnotableの一部をテーマのノータブルに置き換える。足りなければ道中の小ノードをnotableに格上げする。
+func _assign_themes(tree: SkillTree, rng: RandomNumberGenerator) -> void:
+	var themes := THEMES.duplicate()
+	_shuffle(themes, rng)
+	var candidates := tree.nodes.filter(func(n: SkillNode): return n.kind == "notable")
+	var promotable := tree.nodes.filter(func(n: SkillNode): return n.kind == "small" and n.depth >= 2)
+	_shuffle(candidates, rng)
+	_shuffle(promotable, rng)
+	candidates.append_array(promotable)
+	for theme in themes.slice(0, rng.randi_range(theme_count[0], theme_count[1])):
+		var templates: Array = theme["payoffs"].duplicate()
+		if not theme["enabler"].is_empty():
+			templates.push_front(theme["enabler"])
+		# 付与する側を置けないなら、活かす側も置かない
+		if candidates.size() < templates.size():
+			continue
+		for template in templates:
+			_make_themed_notable(candidates.pop_front(), template, rng)
+
+
+func _make_themed_notable(node: SkillNode, template: Dictionary, rng: RandomNumberGenerator) -> void:
+	node.kind = "notable"
+	node.name = template["name"]
+	node.effects.clear()
+	for effect in template["effects"]:
+		var rolled: Dictionary = effect.duplicate()
+		for key in ["value", "chance"]:
+			if rolled.has(key):
+				rolled[key] = _roll(rolled[key], rng)
+		node.effects.append(rolled)
 
 
 func _make_small(node: SkillNode, rng: RandomNumberGenerator) -> void:

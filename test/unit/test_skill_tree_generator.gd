@@ -80,8 +80,14 @@ func test_ルート以外のノードは効果を持つ():
 		if node.parent_id == -1:
 			continue
 		assert_false(node.effects.is_empty(), "ノード%dに効果がない" % node.id)
-		for effect in node.effects:
-			assert_has(Stats.NAMES, effect["stat"])
+
+
+func test_生成したツリーは読み込み時の検証を通る():
+	var serializer := SkillTreeSerializer.new()
+	for seed in 20:
+		var data := serializer.to_dict(generator.generate(seed))
+
+		assert_not_null(serializer.from_dict(data), "seed %d: %s" % [seed, " / ".join(serializer.errors)])
 
 
 func test_ルートは効果を持たない():
@@ -150,13 +156,16 @@ func test_smallはflatかincreasedを1つ持つ():
 		assert_gt(node.effects[0]["value"], 0)
 
 
-func test_notableはincreasedを2つ以上持つ():
-	var tree := generator.generate(1)
-
-	for node in _nodes_of_kind(tree, "notable"):
-		assert_gte(node.effects.size(), 2)
-		for effect in node.effects:
-			assert_eq(effect["type"], "increased")
+func test_テーマのないnotableはincreasedを2つ以上持つ():
+	var checked := 0
+	for seed in 20:
+		var tree := generator.generate(seed)
+		for node in _nodes_of_kind(tree, "notable").filter(func(n: SkillNode): return n.name == ""):
+			checked += 1
+			assert_gte(node.effects.size(), 2)
+			for effect in node.effects:
+				assert_eq(effect["type"], "increased")
+	assert_gt(checked, 0)
 
 
 func test_keystoneは名前を持ちプラスのmoreとマイナスのmoreを両方持つ():
@@ -167,3 +176,29 @@ func test_keystoneは名前を持ちプラスのmoreとマイナスのmoreを両
 		var mores: Array = node.effects.filter(func(e): return e["type"] == "more").map(func(e): return e["value"])
 		assert_true(mores.any(func(v): return v > 0), "%s に利得がない" % node.name)
 		assert_true(mores.any(func(v): return v < 0), "%s に代償がない" % node.name)
+
+
+func _all_effects(tree: SkillTree) -> Array:
+	var effects := []
+	for node in tree.nodes:
+		effects.append_array(node.effects)
+	return effects
+
+
+func test_生成されたツリーには条件付き効果を持つノードが含まれる():
+	for seed in 20:
+		var effects := _all_effects(generator.generate(seed))
+
+		assert_true(effects.any(func(e): return e.has("condition")), "seed %d" % seed)
+
+
+func test_敵の状態異常を条件とする効果があれば付与する手段もある():
+	var condition_to_status := {"enemy_blinded": "blind", "enemy_poisoned": "poison"}
+	for seed in 30:
+		var effects := _all_effects(generator.generate(seed))
+		var applied := effects.filter(func(e): return e["type"] == "on_hit").map(func(e): return e["apply"])
+
+		for effect in effects:
+			var status = condition_to_status.get(effect.get("condition"))
+			if status != null:
+				assert_has(applied, status, "seed %d: %s を付与する手段がない" % [seed, status])
