@@ -207,3 +207,32 @@ func test_生成したツリーを保存して読み込むとIDも含めて元�
 	var loaded := serializer.from_json(serializer.to_json(original))
 
 	assert_eq(serializer.to_dict(loaded), serializer.to_dict(original))
+
+
+func test_条件付き効果とon_hitを保存して読み込める():
+	var tree := _make_tree()
+	tree.get_node(1).effects = [
+		{"type": "increased", "stat": "crit_chance", "value": 25, "condition": "enemy_blinded"},
+		{"type": "on_hit", "chance": 20, "apply": "blind"},
+	]
+
+	var loaded := serializer.from_json(serializer.to_json(tree))
+
+	assert_not_null(loaded, " / ".join(serializer.errors))
+	assert_eq(loaded.get_node(1).effects, tree.get_node(1).effects)
+	assert_typeof(loaded.get_node(1).effects[1]["chance"], TYPE_INT)
+
+
+func test_未知の条件はエラーになる():
+	var effect := {"type": "increased", "stat": "attack", "value": 10, "condition": "rainy_day"}
+	_assert_rejected([_root_entry(), _entry(1, 0, [effect])], "rainy_day")
+
+
+func test_未知の状態異常はエラーになる():
+	_assert_rejected([_root_entry(), _entry(1, 0, [{"type": "on_hit", "chance": 10, "apply": "freeze"}])], "freeze")
+
+
+func test_on_hitの確率が1から100の整数でなければエラーになる():
+	_assert_rejected([_root_entry(), _entry(1, 0, [{"type": "on_hit", "chance": 0, "apply": "blind"}])], "chance")
+	_assert_rejected([_root_entry(), _entry(1, 0, [{"type": "on_hit", "chance": 101, "apply": "blind"}])], "chance")
+	_assert_rejected([_root_entry(), _entry(1, 0, [{"type": "on_hit", "chance": 12.5, "apply": "blind"}])], "chance")

@@ -6,7 +6,7 @@ extends RefCounted
 const VERSION := 2
 const REQUIRED_KEYS := ["id", "parent", "kind", "effects"]
 const KINDS := ["root", "small", "notable", "keystone"]
-const EFFECT_TYPES := ["flat", "increased", "more"]
+const EFFECT_TYPES := ["flat", "increased", "more", "on_hit"]
 
 ## 直前の読み込みで見つかった問題。AIに修正を依頼するときにもそのまま渡せる文言にする。
 var errors: Array[String] = []
@@ -138,18 +138,36 @@ func _validate_effects(index: int, effects: Variant) -> void:
 			errors.append("nodes[%d] の effects にオブジェクトでない要素があります: %s" % [index, effect])
 			continue
 		var type = effect.get("type")
-		var stat = effect.get("stat")
-		var value = effect.get("value")
 		if not EFFECT_TYPES.has(type):
 			errors.append("nodes[%d] の効果の type %s は未知です（使えるのは %s）" % [index, type, ", ".join(EFFECT_TYPES)])
-		elif not Stats.NAMES.has(stat):
-			errors.append("nodes[%d] の %s は未知のステータスです（使えるのは %s）" % [index, stat, ", ".join(Stats.NAMES)])
-		elif not _is_integer(value):
-			errors.append("nodes[%d] の %s の値は整数にしてください: %s" % [index, stat, value])
-		elif type == "more" and (value == 0 or value <= -100):
-			errors.append("nodes[%d] の %s の more は0以外かつ-100より大きくしてください: %s" % [index, stat, value])
-		elif type != "more" and value <= 0:
-			errors.append("nodes[%d] の %s の %s は正の値にしてください: %s" % [index, stat, type, value])
+		elif type == "on_hit":
+			_validate_on_hit(index, effect)
+		else:
+			_validate_stat_effect(index, effect)
+
+
+func _validate_on_hit(index: int, effect: Dictionary) -> void:
+	var chance = effect.get("chance")
+	if not _is_integer(chance) or chance < 1 or chance > 100:
+		errors.append("nodes[%d] の on_hit の chance は1〜100の整数にしてください: %s" % [index, chance])
+	if not Stats.STATUS_LABELS.has(effect.get("apply")):
+		errors.append("nodes[%d] の on_hit の apply %s は未知の状態異常です（使えるのは %s）" % [index, effect.get("apply"), ", ".join(Stats.STATUS_LABELS.keys())])
+
+
+func _validate_stat_effect(index: int, effect: Dictionary) -> void:
+	var type = effect.get("type")
+	var stat = effect.get("stat")
+	var value = effect.get("value")
+	if effect.has("condition") and not Stats.CONDITION_LABELS.has(effect["condition"]):
+		errors.append("nodes[%d] の condition %s は未知の条件です（使えるのは %s）" % [index, effect["condition"], ", ".join(Stats.CONDITION_LABELS.keys())])
+	if not Stats.NAMES.has(stat):
+		errors.append("nodes[%d] の %s は未知のステータスです（使えるのは %s）" % [index, stat, ", ".join(Stats.NAMES)])
+	elif not _is_integer(value):
+		errors.append("nodes[%d] の %s の値は整数にしてください: %s" % [index, stat, value])
+	elif type == "more" and (value == 0 or value <= -100):
+		errors.append("nodes[%d] の %s の more は0以外かつ-100より大きくしてください: %s" % [index, stat, value])
+	elif type != "more" and value <= 0:
+		errors.append("nodes[%d] の %s の %s は正の値にしてください: %s" % [index, stat, type, value])
 
 
 ## JSONの数値は小数として読まれるため、小数部がなければ整数とみなす。
@@ -190,8 +208,17 @@ func _build(entries: Array, root_entry: Dictionary) -> SkillTree:
 			node.kind = entry["kind"]
 		node.name = entry.get("name", "")
 		for effect in entry["effects"]:
-			node.effects.append({"type": effect["type"], "stat": effect["stat"], "value": int(effect["value"])})
+			node.effects.append(_normalize_effect(effect))
 	return tree
+
+
+## JSON由来の小数を整数に戻す。
+func _normalize_effect(effect: Dictionary) -> Dictionary:
+	var normalized := effect.duplicate()
+	for key in ["value", "chance"]:
+		if normalized.has(key):
+			normalized[key] = int(normalized[key])
+	return normalized
 
 
 ## ルートから幅優先で辿って深さを決め、辿り着けたノードの数を返す。

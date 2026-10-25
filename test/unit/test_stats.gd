@@ -89,3 +89,32 @@ func test_耐久の目安はHPと防御力から計算する():
 	var stats := {"hp": 200.0, "attack": 10.0, "defense": 50.0, "speed": 10.0, "crit_chance": 0.0, "crit_damage": 150.0}
 
 	assert_almost_eq(Stats.defense(stats), 300.0, 0.001)
+
+
+func test_条件付き効果は状況が条件を満たすときだけ計算に含まれる():
+	var effects := [{"type": "increased", "stat": "attack", "value": 50, "condition": "enemy_blinded"}]
+
+	assert_almost_eq(Stats.calculate(effects, {"enemy_blinded": true})["attack"], 15.0, 0.001)
+	assert_almost_eq(Stats.calculate(effects, {"enemy_blinded": false})["attack"], 10.0, 0.001)
+
+
+func test_状況を渡さなければ条件付き効果は含まれない():
+	var effects := [{"type": "more", "stat": "attack", "value": 50, "condition": "low_hp"}]
+
+	assert_almost_eq(Stats.calculate(effects)["attack"], 10.0, 0.001)
+
+
+func test_on_hitはステータスの計算に影響しない():
+	var stats := Stats.calculate([{"type": "on_hit", "chance": 20, "apply": "blind"}])
+
+	assert_eq(stats, Stats.calculate([]))
+
+
+func test_条件付き効果は条件を先頭に付けて表示する():
+	var effect := {"type": "increased", "stat": "crit_chance", "value": 25, "condition": "enemy_blinded"}
+
+	assert_eq(Stats.describe([effect]), "敵が盲目のとき 会心率 +25%")
+
+
+func test_on_hitは発動率と付与する状態異常を表示する():
+	assert_eq(Stats.describe([{"type": "on_hit", "chance": 20, "apply": "poison"}]), "攻撃時 20%で毒を付与")
