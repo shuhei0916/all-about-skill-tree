@@ -3,6 +3,8 @@ extends RefCounted
 ## 移動操作型の対CPU戦1ステージ分のロジック。描画からは切り離し、step で時間を進める。
 ## ダメージ = 攻撃力 × (会心なら会心ダメージ%) × 100 / (100 + 相手の防御力)（Battle と同じ）
 
+enum State { PLAYING, CLEARED, FAILED }
+
 const ARENA_SIZE := Vector2(1200, 800)
 ## プレイヤーの移動速度（ピクセル/秒）
 const PLAYER_MOVE_SPEED := 200.0
@@ -12,7 +14,20 @@ const ATTACK_RANGE := 300.0
 const ACTION_GAUGE := 100.0
 ## 敵が一度接触ダメージを与えてから、次に与えられるようになるまでの秒数
 const CONTACT_COOLDOWN := 1.0
+## 敵が湧く間隔（秒）。ステージの始めから終わりにかけて短くなる
+const SPAWN_INTERVAL_START := 1.5
+const SPAWN_INTERVAL_END := 0.5
+## ステージが1つ進むごとに、敵のHPと攻撃力がこの割合だけ増える（1ステージ目が基準）
+const HP_GROWTH := 0.5
+const ATTACK_GROWTH := 0.25
 
+## 何ステージ目か。1から始まる
+var number: int
+var state := State.PLAYING
+var duration := 60.0
+var time := 0.0
+## false にすると敵が自動では湧かない（テスト用）
+var spawning := true
 var player_position := ARENA_SIZE / 2.0
 var player_hp: float
 var player_max_hp: float
@@ -25,9 +40,11 @@ var _effects: Array
 var _on_hits: Array
 var _rng := RandomNumberGenerator.new()
 var _attack_gauge := 0.0
+var _spawn_timer := 0.0
 
 
-func _init(player_effects: Array, seed: int) -> void:
+func _init(player_effects: Array, seed: int, p_number := 1) -> void:
+	number = p_number
 	_effects = player_effects
 	_on_hits = player_effects.filter(func(e: Dictionary): return e["type"] == "on_hit")
 	_rng.seed = seed
@@ -37,16 +54,55 @@ func _init(player_effects: Array, seed: int) -> void:
 
 func spawn_enemy(position: Vector2) -> StageEnemy:
 	var enemy := StageEnemy.new(position)
+	enemy.max_hp *= 1.0 + HP_GROWTH * (number - 1)
+	enemy.hp = enemy.max_hp
+	enemy.attack *= 1.0 + ATTACK_GROWTH * (number - 1)
 	enemies.append(enemy)
 	return enemy
 
 
 ## delta 秒だけ時間を進める。move はプレイヤーの移動方向。
 func step(delta: float, move: Vector2) -> void:
+	if state != State.PLAYING:
+		return
+	time += delta
 	player_position += move.limit_length(1.0) * PLAYER_MOVE_SPEED * delta
 	player_position = player_position.clamp(Vector2.ONE * PLAYER_RADIUS, ARENA_SIZE - Vector2.ONE * PLAYER_RADIUS)
 	_player_attack(delta)
 	_enemies_act(delta)
+	if state == State.FAILED:
+		return
+	# 0.1 を足し続けたときの誤差で1回分ずれないよう、わずかな差は到達とみなす
+	if time >= duration - 0.0001:
+		time = duration
+		state = State.CLEARED
+		return
+	if spawning:
+		_spawn(delta)
+
+
+func _spawn(delta: float) -> void:
+	_spawn_timer += delta
+	var interval := lerpf(SPAWN_INTERVAL_START, SPAWN_INTERVAL_END, clampf(time / duration, 0.0, 1.0))
+	if _spawn_timer >= interval:
+		_spawn_timer -= interval
+		spawn_enemy(_random_edge_position())
+
+
+## アリーナの外周上のランダムな点。
+func _random_edge_position() -> Vector2:
+	var w := ARENA_SIZE.x
+	var h := ARENA_SIZE.y
+	var d := _rng.randf() * (w + h) * 2.0
+	if d < w:
+		return Vector2(d, 0)
+	d -= w
+	if d < h:
+		return Vector2(w, d)
+	d -= h
+	if d < w:
+		return Vector2(w - d, h)
+	return Vector2(0, h - (d - w))
 
 
 func _player_attack(delta: float) -> void:
@@ -122,6 +178,10 @@ func _enemies_act(delta: float) -> void:
 			if enemy.statuses.has("blind") and _rng.randf() < Battle.BLIND_MISS_CHANCE:
 				continue
 			player_hp -= _damage(enemy.attack, Stats.calculate(_effects, _context(enemy))["defense"])
+			if player_hp <= 0.0:
+				player_hp = 0.0
+				state = State.FAILED
+				return
 
 
 func _touches_player(enemy: StageEnemy) -> bool:

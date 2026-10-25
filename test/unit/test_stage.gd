@@ -4,8 +4,11 @@ extends GutTest
 const NO_CRIT := {"type": "more", "stat": "crit_chance", "value": -100}
 
 
+# 敵が自動では湧かないステージ。テストで置いた敵だけを相手にする
 func _stage(effects := []) -> Stage:
-	return Stage.new(effects, 1)
+	var stage := Stage.new(effects, 1)
+	stage.spawning = false
+	return stage
 
 
 func test_プレイヤーはアリーナの中央から始まり移動方向に移動する():
@@ -151,3 +154,69 @@ func test_盲目の敵は接触ダメージを外すことがある():
 			stage.step(0.1, Vector2.ZERO)
 
 	assert_gt(blinded.player_hp, normal.player_hp)
+
+
+func _on_edge(position: Vector2) -> bool:
+	return is_zero_approx(position.x) or is_zero_approx(position.y) \
+		or is_equal_approx(position.x, Stage.ARENA_SIZE.x) or is_equal_approx(position.y, Stage.ARENA_SIZE.y)
+
+
+func test_時間とともに敵がアリーナの端に湧く():
+	var stage := Stage.new([], 1)
+
+	for i in 50:
+		stage.step(0.1, Vector2.ZERO)
+		if not stage.enemies.is_empty():
+			break
+
+	assert_eq(stage.enemies.size(), 1)
+	assert_true(_on_edge(stage.enemies[0].position), "湧いた位置: %s" % stage.enemies[0].position)
+
+
+func test_制限時間まで生き延びるとクリアし時間が止まる():
+	var stage := _stage()
+	stage.duration = 5.0
+	assert_eq(stage.state, Stage.State.PLAYING)
+
+	for i in 80:
+		stage.step(0.1, Vector2.ZERO)
+
+	assert_eq(stage.state, Stage.State.CLEARED)
+	assert_almost_eq(stage.time, 5.0, 0.001)
+
+
+func test_HPが0になると失敗し時間が止まる():
+	var stage := _stage()
+	_target(stage, Vector2(20, 0)).attack = 1000.0
+
+	stage.step(0.1, Vector2.ZERO)
+	stage.step(0.1, Vector2.ZERO)
+
+	assert_eq(stage.state, Stage.State.FAILED)
+	assert_eq(stage.player_hp, 0.0)
+	assert_almost_eq(stage.time, 0.1, 0.001)
+
+
+func _play(seed: int, seconds: float) -> Stage:
+	var stage := Stage.new([], seed)
+	for i in roundi(seconds / 0.1):
+		# 円を描くように逃げ回る
+		stage.step(0.1, Vector2.RIGHT.rotated(i * 0.1))
+	return stage
+
+
+func test_同じシード同じ操作なら同じ結果になる():
+	var a := _play(7, 20.0)
+	var b := _play(7, 20.0)
+
+	assert_gt(a.kills, 0)
+	assert_eq([a.player_hp, a.exp, a.kills, a.enemies.size()], [b.player_hp, b.exp, b.kills, b.enemies.size()])
+
+
+func test_ステージが進むほど敵が強くなる():
+	var first := Stage.new([], 1, 1).spawn_enemy(Vector2.ZERO)
+	var third := Stage.new([], 1, 3).spawn_enemy(Vector2.ZERO)
+
+	assert_gt(third.max_hp, first.max_hp)
+	assert_eq(third.hp, third.max_hp)
+	assert_gt(third.attack, first.attack)
