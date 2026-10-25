@@ -104,11 +104,41 @@ func test_生成されたツリーにはsmall・notable・keystoneが含まれ�
 		assert_false(_nodes_of_kind(tree, "keystone").is_empty(), "seed %d" % seed)
 
 
-func test_notableとkeystoneは枝の末端に置かれる():
-	var tree := generator.generate(1)
+func test_keystoneは枝の末端に置かれる():
+	for seed in 20:
+		var tree := generator.generate(seed)
 
-	for node in _nodes_of_kind(tree, "notable") + _nodes_of_kind(tree, "keystone"):
-		assert_true(tree.children_of(node.id).is_empty(), "ノード%dの先にまだノードがある" % node.id)
+		for node in _nodes_of_kind(tree, "keystone"):
+			assert_true(tree.children_of(node.id).is_empty(), "seed %d: ノード%dの先にまだノードがある" % [seed, node.id])
+
+
+func _count_over_seeds(predicate: Callable) -> int:
+	var count := 0
+	for seed in 20:
+		var tree := generator.generate(seed)
+		count += tree.nodes.filter(func(n: SkillNode): return predicate.call(tree, n)).size()
+	return count
+
+
+func test_notableは枝の途中にも置かれる():
+	var count := _count_over_seeds(func(tree: SkillTree, n: SkillNode):
+		return n.kind == "notable" and not tree.children_of(n.id).is_empty())
+
+	assert_gt(count, 0)
+
+
+func test_末端にはsmallも置かれる():
+	var count := _count_over_seeds(func(tree: SkillTree, n: SkillNode):
+		return n.kind == "small" and tree.children_of(n.id).is_empty())
+
+	assert_gt(count, 0)
+
+
+func test_notableはルート以外のノードの3割以下():
+	var notables := _count_over_seeds(func(_t: SkillTree, n: SkillNode): return n.kind == "notable")
+	var non_root := _count_over_seeds(func(_t: SkillTree, n: SkillNode): return n.kind != "root")
+
+	assert_lte(float(notables) / non_root, 0.3)
 
 
 func test_smallはflatかincreasedを1つ持つ():

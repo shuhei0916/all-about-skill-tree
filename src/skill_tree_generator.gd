@@ -1,7 +1,8 @@
 class_name SkillTreeGenerator
 extends RefCounted
 ## シードからスキルツリーを生成する。
-## まず木の形を作り、その後で末端を目的地（notable / keystone）、道中を small にして効果を割り当てる。
+## まず木の形を作り、その後で種類と効果を割り当てる。
+## keystone は遠い末端に置き、notable は末端と道中の両方に置く（PoE2の配置に倣う）。
 
 var max_depth := 5
 var min_branches := 3
@@ -9,6 +10,9 @@ var max_branches := 6
 var max_children := 2
 ## 1つのツリーに置くキーストーンの数 [最小, 最大]
 var keystone_count := [1, 2]
+## 枝の途中・末端のノードがnotableになる確率
+var notable_chance_on_path := 0.15
+var notable_chance_at_leaf := 0.45
 
 ## flat効果の値の範囲 [最小, 最大]。会心系は固定値だと分かりにくいので %系の効果だけにする。
 const FLAT_RANGE := {
@@ -74,6 +78,8 @@ func _assign_kinds(tree: SkillTree, rng: RandomNumberGenerator) -> void:
 			continue
 		if tree.children_of(node.id).is_empty():
 			leaves.append(node)
+		elif node.depth >= 2 and rng.randf() < notable_chance_on_path:
+			_make_notable(node, rng)
 		else:
 			_make_small(node, rng)
 
@@ -85,8 +91,10 @@ func _assign_kinds(tree: SkillTree, rng: RandomNumberGenerator) -> void:
 	for i in leaves.size():
 		if i < count:
 			_make_keystone(leaves[i], keystones[i])
-		else:
+		elif rng.randf() < notable_chance_at_leaf:
 			_make_notable(leaves[i], rng)
+		else:
+			_make_small(leaves[i], rng)
 
 
 func _make_small(node: SkillNode, rng: RandomNumberGenerator) -> void:
