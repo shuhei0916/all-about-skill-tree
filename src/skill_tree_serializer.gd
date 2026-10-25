@@ -17,6 +17,38 @@ func to_dict(tree: SkillTree) -> Dictionary:
 	return {"version": VERSION, "nodes": nodes}
 
 
+
+func to_json(tree: SkillTree) -> String:
+	return JSON.stringify(to_dict(tree), "	")
+
+
+func from_json(text: String) -> SkillTree:
+	var json := JSON.new()
+	if json.parse(text) != OK:
+		errors.assign(["JSONとして読めません（%d行目: %s）" % [json.get_error_line(), json.get_error_message()]])
+		return null
+	if not json.data is Dictionary:
+		errors.assign(["JSONの最上位はオブジェクトにしてください"])
+		return null
+	return from_dict(json.data)
+
+
+func save(tree: SkillTree, path: String) -> Error:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_string(to_json(tree))
+	return OK
+
+
+func load_file(path: String) -> SkillTree:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		errors.assign(["ファイルを開けません: %s（%s）" % [path, error_string(FileAccess.get_open_error())]])
+		return null
+	return from_json(file.get_as_text())
+
+
 ## 読み込みに失敗した場合は null を返し、理由を errors に入れる。
 func from_dict(data: Dictionary) -> SkillTree:
 	errors.clear()

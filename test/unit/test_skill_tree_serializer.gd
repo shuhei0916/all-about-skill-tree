@@ -169,3 +169,29 @@ func test_idとparentで整数と小数が混在していても読み込める()
 	]})
 
 	assert_not_null(loaded, " / ".join(serializer.errors))
+
+
+func test_ファイルに保存して読み込むと同じツリーに戻る():
+	var path := "user://test_skill_tree.json"
+	var original := _make_tree()
+
+	assert_eq(serializer.save(original, path), OK)
+	var loaded := serializer.load_file(path)
+	DirAccess.remove_absolute(path)
+
+	assert_eq(serializer.to_dict(loaded), serializer.to_dict(original))
+
+
+func test_存在しないファイルを読み込むとエラーになる():
+	assert_null(serializer.load_file("user://does_not_exist.json"))
+	assert_false(serializer.errors.is_empty())
+
+
+func test_不正なJSON文字列はエラーになる():
+	assert_null(serializer.from_json("{nodes: [}"))
+	assert_string_contains(" / ".join(serializer.errors), "JSON")
+
+
+func test_JSONの最上位がオブジェクトでない場合はエラーになる():
+	assert_null(serializer.from_json("[1, 2, 3]"))
+	assert_false(serializer.errors.is_empty())
