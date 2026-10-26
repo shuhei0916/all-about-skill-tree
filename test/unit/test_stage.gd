@@ -98,9 +98,11 @@ func test_射程内に敵がいなければ攻撃せず準備を溜めたまま�
 		stage.step(0.1, Vector2.ZERO)
 	assert_eq(enemy.hp, enemy.max_hp)
 
-	# 射程に入ったらすぐに1回だけ攻撃する
+	# 射程に入ったらすぐに1発だけ撃ち、それが届く
 	enemy.position = stage.player_position + Vector2(100, 0)
 	stage.step(0.1, Vector2.ZERO)
+	assert_eq(stage.projectiles.size(), 1)
+	stage.step(0.2, Vector2.ZERO)
 	assert_almost_eq(enemy.max_hp - enemy.hp, 10.0, 0.001)
 
 
@@ -227,3 +229,45 @@ func test_ステージが進むほど敵を倒したときのEXPが増える():
 	var third := Stage.new([], 1, 3).spawn_enemy(Vector2.ZERO)
 
 	assert_gt(third.exp, first.exp)
+
+
+func test_攻撃するといちばん近い敵に向かって弾を撃ち撃った時点ではダメージが入らない():
+	var stage := _stage([NO_CRIT])
+	var enemy := _target(stage, Vector2(0, -250))
+
+	for i in 10:
+		stage.step(0.1, Vector2.ZERO)
+
+	assert_eq(stage.projectiles.size(), 1)
+	assert_almost_eq(stage.projectiles[0].velocity.normalized().y, -1.0, 0.001)
+	assert_eq(enemy.hp, enemy.max_hp)
+
+
+func test_弾は最初に触れた敵に当たって消える():
+	var stage := _stage([NO_CRIT])
+	var target := _target(stage, Vector2(250, 0))
+	for i in 10:
+		stage.step(0.1, Vector2.ZERO)
+	assert_eq(stage.projectiles.size(), 1)
+	# 撃った後に、弾の通り道へ別の敵が割り込む
+	var blocker := _target(stage, Vector2(100, 0))
+
+	stage.step(0.3, Vector2.ZERO)
+
+	assert_almost_eq(blocker.max_hp - blocker.hp, 10.0, 0.001)
+	assert_eq(target.hp, target.max_hp)
+	assert_true(stage.projectiles.is_empty())
+
+
+func test_弾は射程の一定倍率まで飛ぶと消える():
+	var stage := _stage([NO_CRIT])
+	var enemy := _target(stage, Vector2(250, 0))
+	for i in 10:
+		stage.step(0.1, Vector2.ZERO)
+	assert_eq(stage.projectiles.size(), 1)
+	# 撃った後に的が射程の外へ逃げる
+	enemy.position = stage.player_position + Vector2(0, 2000)
+
+	stage.step(Stage.ATTACK_RANGE * Stage.PROJECTILE_RANGE_RATIO / Stage.PROJECTILE_SPEED + 0.01, Vector2.ZERO)
+
+	assert_true(stage.projectiles.is_empty())

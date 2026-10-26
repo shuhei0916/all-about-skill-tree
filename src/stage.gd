@@ -10,6 +10,10 @@ const ARENA_SIZE := Vector2(1200, 800)
 const PLAYER_MOVE_SPEED := 200.0
 const PLAYER_RADIUS := 16.0
 const ATTACK_RANGE := 300.0
+## 弾の速さ（ピクセル/秒）と当たり判定の半径。弾は射程のこの倍率まで飛ぶと消える
+const PROJECTILE_SPEED := 600.0
+const PROJECTILE_RADIUS := 4.0
+const PROJECTILE_RANGE_RATIO := 1.5
 ## 攻撃ゲージがこの値まで溜まると1回攻撃する。素早さ10なら1秒に1回（Battle と同じ）
 const ACTION_GAUGE := 100.0
 ## 敵が一度接触ダメージを与えてから、次に与えられるようになるまでの秒数
@@ -33,6 +37,7 @@ var player_position := ARENA_SIZE / 2.0
 var player_hp: float
 var player_max_hp: float
 var enemies: Array[StageEnemy] = []
+var projectiles: Array[StageProjectile] = []
 ## このステージで得たEXPと倒した敵の数
 var exp := 0
 var kills := 0
@@ -72,6 +77,7 @@ func step(delta: float, move: Vector2) -> void:
 	player_position += move.limit_length(1.0) * PLAYER_MOVE_SPEED * delta
 	player_position = player_position.clamp(Vector2.ONE * PLAYER_RADIUS, ARENA_SIZE - Vector2.ONE * PLAYER_RADIUS)
 	_player_attack(delta)
+	_move_projectiles(delta)
 	_enemies_act(delta)
 	if state == State.FAILED:
 		return
@@ -117,16 +123,50 @@ func _player_attack(delta: float) -> void:
 			_attack_gauge = ACTION_GAUGE
 			return
 		_attack_gauge -= ACTION_GAUGE
-		var stats := Stats.calculate(_effects, _context(target))
-		var damage: float = stats["attack"]
-		if _rng.randf() * 100.0 < stats["crit_chance"]:
-			damage *= stats["crit_damage"] / 100.0
-		target.hp -= _damage(damage, target.defense)
-		for on_hit in _on_hits:
-			if _rng.randf() * 100.0 < on_hit["chance"]:
-				_apply_status(target, on_hit["apply"], stats)
-		if target.hp <= 0.0:
-			_defeat(target)
+		var direction := player_position.direction_to(target.position)
+		projectiles.append(StageProjectile.new(player_position, direction * PROJECTILE_SPEED))
+
+
+func _move_projectiles(delta: float) -> void:
+	for projectile in projectiles.duplicate():
+		var from: Vector2 = projectile.position
+		projectile.position += projectile.velocity * delta
+		projectile.traveled += projectile.velocity.length() * delta
+		var hit := _first_enemy_on_segment(from, projectile.position)
+		if hit != null:
+			projectiles.erase(projectile)
+			_hit(hit)
+		elif projectile.traveled >= ATTACK_RANGE * PROJECTILE_RANGE_RATIO:
+			projectiles.erase(projectile)
+
+
+## from から to へ動いた弾が触れる敵のうち、from にいちばん近いもの。
+func _first_enemy_on_segment(from: Vector2, to: Vector2) -> StageEnemy:
+	var first: StageEnemy = null
+	var first_distance := INF
+	for enemy in enemies:
+		var closest := Geometry2D.get_closest_point_to_segment(enemy.position, from, to)
+		if closest.distance_to(enemy.position) > enemy.radius + PROJECTILE_RADIUS:
+			continue
+		var distance := from.distance_to(closest)
+		if distance < first_distance:
+			first = enemy
+			first_distance = distance
+	return first
+
+
+## 弾が当たった敵にダメージと on_hit を与える。条件付き効果はその敵の状態で判定する。
+func _hit(enemy: StageEnemy) -> void:
+	var stats := Stats.calculate(_effects, _context(enemy))
+	var damage: float = stats["attack"]
+	if _rng.randf() * 100.0 < stats["crit_chance"]:
+		damage *= stats["crit_damage"] / 100.0
+	enemy.hp -= _damage(damage, enemy.defense)
+	for on_hit in _on_hits:
+		if _rng.randf() * 100.0 < on_hit["chance"]:
+			_apply_status(enemy, on_hit["apply"], stats)
+	if enemy.hp <= 0.0:
+		_defeat(enemy)
 
 
 ## 条件付き効果の判定に使う状況。敵の状態は、いま相手にしている敵で判定する。

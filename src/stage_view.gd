@@ -10,6 +10,7 @@ const COLOR_ARENA := Color("262932")
 const COLOR_ARENA_BORDER := Color("4a4f5c")
 const COLOR_PLAYER := Color("f2c14e")
 const COLOR_RANGE := Color(1, 1, 1, 0.06)
+const COLOR_PROJECTILE := Color("fff2b3")
 const COLOR_ENEMY := Color("e05a5a")
 const COLOR_BLIND := Color("8a8fa0")
 const COLOR_POISON := Color("7bd36a")
@@ -72,6 +73,12 @@ func _draw() -> void:
 
 	for enemy in stage.enemies:
 		_draw_enemy(enemy, view_scale)
+	for projectile in stage.projectiles:
+		var tip := to_screen(projectile.position)
+		# 進行方向に短い尾を引いて、飛んでいる向きが分かるようにする
+		var tail := tip - projectile.velocity.normalized() * 10.0 * view_scale
+		draw_line(tail, tip, COLOR_PROJECTILE, Stage.PROJECTILE_RADIUS * view_scale)
+		draw_circle(tip, Stage.PROJECTILE_RADIUS * view_scale, COLOR_PROJECTILE)
 	_draw_hud()
 
 
