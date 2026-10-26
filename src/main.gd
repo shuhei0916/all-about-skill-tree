@@ -14,6 +14,7 @@ var _stage_number := 1
 var _tree_screen: Control
 var _stage_view: StageView
 var _start_button: Button
+var _pause_menu: Control
 var _view: SkillTreeView
 var _seed_edit: LineEdit
 var _points_label: Label
@@ -24,6 +25,8 @@ var _open_dialog: FileDialog
 
 
 func _ready() -> void:
+	# 一時停止中も Esc を受け取れるようにする。ステージだけは一時停止で止まる
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
 	_randomize_seed()
 
@@ -100,7 +103,48 @@ func _build_ui() -> void:
 	_stage_view.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_stage_view.finished.connect(_on_stage_finished)
 	_stage_view.hide()
+	_stage_view.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(_stage_view)
+
+	_pause_menu = _make_pause_menu()
+	add_child(_pause_menu)
+
+
+func _make_pause_menu() -> Control:
+	# 半透明の幕で後ろの画面を覆い、クリックも通さない
+	var overlay := ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.6)
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.hide()
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
+
+	var menu := VBoxContainer.new()
+	menu.custom_minimum_size.x = 220
+	menu.add_theme_constant_override("separation", 12)
+	center.add_child(menu)
+
+	var title := _make_label("一時停止中")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu.add_child(title)
+	menu.add_child(_make_button("再開", _toggle_pause))
+	menu.add_child(_make_button("ゲームを終了", func(): get_tree().quit()))
+	return overlay
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		_toggle_pause()
+		get_viewport().set_input_as_handled()
+
+
+func _toggle_pause() -> void:
+	var paused := not _pause_menu.visible
+	_pause_menu.visible = paused
+	get_tree().paused = paused
 
 
 func _make_label(text: String) -> Label:
@@ -179,7 +223,8 @@ func _start_stage() -> void:
 
 func _on_stage_finished(stage: Stage) -> void:
 	# 決着の瞬間が見えるよう、少し待ってからツリー画面に戻す
-	await get_tree().create_timer(1.0).timeout
+	# 一時停止中は待ち時間も止める
+	await get_tree().create_timer(1.0, false).timeout
 	_stage_view.hide()
 	_tree_screen.show()
 	if stage.state == Stage.State.CLEARED:
